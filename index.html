@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giải thích Chiếm quyền Phiên (Session Hijacking)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.8s ease-out forwards;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        .network-line {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 1.5s linear forwards;
+        }
+        
+        @keyframes dash {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+        
+        .highlight {
+            box-shadow: 0 0 0 4px rgba(255, 0, 0, 0.3);
+            transition: box-shadow 0.3s ease;
+        }
+        
+        .token-move {
+            transition: all 1s ease;
+        }
+        
+        .step-button {
+            transition: all 0.3s ease;
+        }
+        
+        .step-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .step-button.active {
+            background-color: #3B82F6;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen font-sans">
+    <div class="container mx-auto px-4 py-12">
+        <h1 class="text-4xl font-bold text-center mb-12 text-blue-400 tracking-wide fade-in">
+            Chiếm Quyền Phiên (Session Hijacking)
+        </h1>
+        
+        <div class="bg-gray-800 rounded-xl p-6 mb-12 shadow-2xl fade-in">
+            <p class="text-lg mb-4 leading-relaxed">
+                <span class="font-bold text-yellow-300">Chiếm quyền phiên</span> là kỹ thuật tấn công mà hacker chiếm quyền điều khiển <span class="text-yellow-300 font-medium">phiên làm việc</span> hợp pháp giữa người dùng và hệ thống mà không cần biết mật khẩu.
+            </p>
+            <p class="text-lg leading-relaxed">
+                Hãy bấm từng bước bên dưới để hiểu cách hoạt động của kỹ thuật này.
+            </p>
+        </div>
+        
+        <!-- Animation Canvas -->
+        <div class="relative h-96 bg-gray-800 rounded-xl mb-6 overflow-hidden border-2 border-gray-700 fade-in" id="animationCanvas">
+            <!-- User -->
+            <div class="absolute left-20 top-1/2 transform -translate-y-1/2 text-center" id="user">
+                <div class="bg-blue-600 text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                </div>
+                <span class="text-sm font-medium">Người dùng</span>
+            </div>
+            
+            <!-- Server -->
+            <div class="absolute right-20 top-1/2 transform -translate-y-1/2 text-center" id="server">
+                <div class="bg-green-600 text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                    </svg>
+                </div>
+                <span class="text-sm font-medium">Máy chủ</span>
+            </div>
+            
+            <!-- Hacker -->
+            <div class="absolute left-1/2 top-12 text-center opacity-0 transform -translate-x-1/2" id="hacker">
+                <div class="bg-red-600 text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    </svg>
+                </div>
+                <span class="text-sm font-medium">Kẻ tấn công</span>
+            </div>
+            
+            <!-- Network Lines -->
+            <svg class="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                <!-- User to Server -->
+                <line id="userToServer" x1="20%" y1="50%" x2="80%" y2="50%" stroke="#3B82F6" stroke-width="3" stroke-dasharray="1000" stroke-dashoffset="1000"/>
+                
+                <!-- Hacker Intercept -->
+                <line id="hackerIntercept1" x1="50%" y1="20%" x2="20%" y2="50%" stroke="#EF4444" stroke-width="3" stroke-dasharray="1000" stroke-dashoffset="1000" style="display: none;"/>
+                <line id="hackerIntercept2" x1="50%" y1="20%" x2="80%" y2="50%" stroke="#EF4444" stroke-width="3" stroke-dasharray="1000" stroke-dashoffset="1000" style="display: none;"/>
+            </svg>
+            
+            <!-- Session Token -->
+            <div class="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold opacity-0 shadow-md token-move" id="sessionToken">
+                SessionID: ABC123
+            </div>
+            
+            <!-- Success Badge -->
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-4 py-2 rounded-full opacity-0" id="successBadge">
+                <strong>Thành công!</strong> Phiên đã bị chiếm
+            </div>
+        </div>
+        
+        <!-- Step Controls -->
+        <div class="flex justify-center gap-2 mb-12">
+            <button class="step-button bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg active" id="step1">1. Đăng nhập</button>
+            <button class="step-button bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg" id="step2" disabled>2. Tạo phiên</button>
+            <button class="step-button bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg" id="step3" disabled>3. Kẻ tấn công</button>
+            <button class="step-button bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg" id="step4" disabled>4. Đánh cắp</button>
+            <button class="step-button bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg" id="step5" disabled>5. Giả mạo</button>
+            <button class="step-button bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg" id="step6" disabled>6. Thành công</button>
+        </div>
+        
+        <!-- Next and Reset Buttons -->
+        <div class="text-center mb-12 flex justify-center gap-4">
+            <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all" id="nextBtn">
+                Bước tiếp theo
+            </button>
+            <button class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all" id="resetBtn">
+                Bắt đầu lại
+            </button>
+        </div>
+        
+        <!-- Step Explanation -->
+        <div class="bg-gray-800 rounded-xl p-6 shadow-2xl" id="stepExplanation">
+            <h3 class="text-xl font-bold mb-4 text-blue-400" id="stepTitle">Bước 1: Người dùng đăng nhập</h3>
+            <p class="text-gray-300" id="stepDesc">
+                Người dùng nhập tên đăng nhập và mật khẩu để xác thực với máy chủ. Nếu thông tin đúng, máy chủ sẽ tạo một phiên làm việc.
+            </p>
+        </div>
+        
+        <!-- Protection Methods -->
+        <div class="mt-12 grid md:grid-cols-3 gap-6 fade-in">
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg hover:bg-gray-700 transition-all">
+                <div class="text-blue-400 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold mb-2">Cơ chế hoạt động</h3>
+                <ul class="text-gray-300 list-disc pl-5 space-y-1">
+                    <li>Mỗi phiên có ID duy nhất</li>
+                    <li>Lưu trữ trong cookie hoặc URL</li>
+                    <li>Máy chủ xác thực qua ID phiên</li>
+                </ul>
+            </div>
+            
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg hover:bg-gray-700 transition-all">
+                <div class="text-red-400 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold mb-2">Phương thức tấn công</h3>
+                <ul class="text-gray-300 list-disc pl-5 space-y-1">
+                    <li>Đánh cắp cookie (XSS, MITM)</li>
+                    <li>Đoán ID phiên</li>
+                    <li>Sử dụng lại token (CSRF)</li>
+                </ul>
+            </div>
+            
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg hover:bg-gray-700 transition-all">
+                <div class="text-green-400 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold mb-2">Cách phòng chống</h3>
+                <ul class="text-gray-300 list-disc pl-5 space-y-1">
+                    <li>Sử dụng HTTPS và Secure flag</li>
+                    <li>HttpOnly cookie</li>
+                    <li>Xác thực đa yếu tố</li>
+                    <li>Thời gian timeout ngắn</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Animation elements
+            const user = document.getElementById('user');
+            const server = document.getElementById('server');
+            const hacker = document.getElementById('hacker');
+            const sessionToken = document.getElementById('sessionToken');
+            const userToServer = document.getElementById('userToServer');
+            const hackerIntercept1 = document.getElementById('hackerIntercept1');
+            const hackerIntercept2 = document.getElementById('hackerIntercept2');
+            const successBadge = document.getElementById('successBadge');
+            
+            // Control elements
+            const stepButtons = [
+                document.getElementById('step1'),
+                document.getElementById('step2'),
+                document.getElementById('step3'),
+                document.getElementById('step4'),
+                document.getElementById('step5'),
+                document.getElementById('step6')
+            ];
+            const nextBtn = document.getElementById('nextBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const stepTitle = document.getElementById('stepTitle');
+            const stepDesc = document.getElementById('stepDesc');
+            
+            // Step explanations
+            const stepExplanations = [
+                {
+                    title: "Bước 1: Người dùng đăng nhập",
+                    desc: "Người dùng nhập tên đăng nhập và mật khẩu để xác thực với máy chủ. Nếu thông tin đúng, máy chủ sẽ tạo một phiên làm việc."
+                },
+                {
+                    title: "Bước 2: Máy chủ tạo phiên",
+                    desc: "Máy chủ tạo ra một ID phiên (session ID) duy nhất và gửi về cho trình duyệt người dùng, thường thông qua cookie."
+                },
+                {
+                    title: "Bước 3: Kẻ tấn công xuất hiện",
+                    desc: "Kẻ tấn công đã có mặt trong cùng mạng hoặc khai thác lỗ hổng để theo dõi lưu lượng truy cập giữa người dùng và máy chủ."
+                },
+                {
+                    title: "Bước 4: Đánh cắp session ID",
+                    desc: "Kẻ tấn công chặn bắt và thu thập các gói tin chứa session ID. Có thể thông qua tấn công Man-in-the-Middle hoặc XSS."
+                },
+                {
+                    title: "Bước 5: Giả mạo người dùng",
+                    desc: "Kẻ tấn công sử dụng session ID đã đánh cắp để gửi yêu cầu đến máy chủ, giả mạo là người dùng hợp pháp."
+                },
+                {
+                    title: "Bước 6: Chiếm quyền thành công",
+                    desc: "Máy chủ không phân biệt được yêu cầu từ kẻ tấn công, xử lý như người dùng thật. Phiên làm việc đã bị chiếm đoạt hoàn toàn."
+                }
+            ];
+            
+            let currentStep = 0;
+            
+            // Initialize first step
+            updateStepInfo(0);
+            animateStep(0);
+            updateStepUI();
+            
+            // Step button click handlers
+            stepButtons.forEach((button, index) => {
+                button.addEventListener('click', () => {
+                    currentStep = index;
+                    updateStepUI();
+                    animateStep(index);
+                });
+            });
+            
+            // Next button
+            nextBtn.addEventListener('click', () => {
+                if(currentStep < stepButtons.length - 1) {
+                    currentStep++;
+                    updateStepUI();
+                    animateStep(currentStep);
+                }
+            });
+            
+            // Reset button
+            resetBtn.addEventListener('click', resetAnimation);
+            
+            function updateStepUI() {
+                // Enable/disable buttons
+                stepButtons.forEach((button, index) => {
+                    button.disabled = index > currentStep;
+                    button.classList.toggle('active', index === currentStep);
+                });
+                
+                // Enable/disable next button
+                nextBtn.disabled = currentStep >= stepButtons.length - 1;
+            }
+            
+            function updateStepInfo(stepIndex) {
+                stepTitle.textContent = stepExplanations[stepIndex].title;
+                stepDesc.textContent = stepExplanations[stepIndex].desc;
+            }
+            
+            function animateStep(stepIndex) {
+                updateStepInfo(stepIndex);
+                
+                switch(stepIndex) {
+                    case 0: // Step 1: User login
+                        // Reset everything except user
+                        hacker.style.opacity = '0';
+                        sessionToken.style.opacity = '0';
+                        hackerIntercept1.style.display = 'none';
+                        hackerIntercept2.style.display = 'none';
+                        successBadge.style.opacity = '0';
+                        
+                        // Reset SVG attributes
+                        userToServer.style.strokeDasharray = '1000';
+                        userToServer.style.strokeDashoffset = '1000';
+                        
+                        // Show network traffic
+                        setTimeout(() => {
+                            userToServer.style.animation = 'dash 1.5s linear forwards';
+                        }, 100);
+                        
+                        // Highlight user and server
+                        user.classList.add('highlight');
+                        server.classList.add('highlight');
+                        setTimeout(() => {
+                            user.classList.remove('highlight');
+                            server.classList.remove('highlight');
+                        }, 1500);
+                        break;
+                        
+                    case 1: // Step 2: Session token
+                        // Show session token between user and server
+                        sessionToken.style.left = '50%';
+                        sessionToken.style.top = '50%';
+                        sessionToken.style.opacity = '1';
+                        sessionToken.style.transform = 'translate(-50%, -50%) scale(1)';
+                        sessionToken.textContent = 'SessionID: ABC123';
+                        sessionToken.style.backgroundColor = '#FEF3C7';
+                        sessionToken.style.color = '#92400E';
+                        
+                        // Pulse the token to show importance
+                        setTimeout(() => {
+                            sessionToken.classList.add('pulse');
+                        }, 500);
+                        
+                        // Show token moving to user
+                        setTimeout(() => {
+                            sessionToken.style.left = '20%';
+                        }, 1000);
+                        break;
+                        
+                    case 2: // Step 3: Hacker appears
+                        // Show hacker
+                        hacker.style.opacity = '1';
+                        
+                        // Highlight hacker
+                        hacker.classList.add('highlight');
+                        setTimeout(() => {
+                            hacker.classList.remove('highlight');
+                        }, 1500);
+                        break;
+                        
+                    case 3: // Step 4: Hacker intercepts
+                        // Show intercept lines
+                        hackerIntercept1.style.display = 'block';
+                        hackerIntercept2.style.display = 'block';
+                        hackerIntercept1.style.strokeDashoffset = '1000';
+                        hackerIntercept2.style.strokeDashoffset = '1000';
+                        
+                        setTimeout(() => {
+                            hackerIntercept1.style.animation = 'dash 1.5s linear forwards';
+                            hackerIntercept2.style.animation = 'dash 1.5s linear forwards';
+                        }, 100);
+                        
+                        // Move token to hacker
+                        setTimeout(() => {
+                            sessionToken.classList.remove('pulse');
+                            sessionToken.style.left = '50%';
+                            sessionToken.style.top = '20%';
+                            sessionToken.textContent = 'Đã đánh cắp: ABC123';
+                            sessionToken.style.backgroundColor = '#FECACA';
+                            sessionToken.style.color = '#991B1B';
+                        }, 1000);
+                        break;
+                        
+                    case 4: // Step 5: Impersonation
+                        // Hide original token briefly
+                        sessionToken.style.opacity = '0';
+                        
+                        // Create fake token moving to server
+                        setTimeout(() => {
+                            sessionToken.style.backgroundColor = '#FECACA';
+                            sessionToken.style.color = '#991B1B';
+                            sessionToken.textContent = 'Giả mạo: ABC123';
+                            sessionToken.style.left = '50%';
+                            sessionToken.style.top = '20%';
+                            sessionToken.style.opacity = '1';
+                            
+                            setTimeout(() => {
+                                sessionToken.style.top = '50%';
+                            }, 300);
+                        }, 500);
+                        break;
+                        
+                    case 5: // Step 6: Success
+                        // Show success badge
+                        successBadge.style.opacity = '1';
+                        
+                        // Change hacker icon to success
+                        const hackerIcon = hacker.querySelector('svg');
+                        hackerIcon.innerHTML = `
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        `;
+                        
+                        // Highlight server as compromised
+                        server.classList.add('highlight');
+                        break;
+                }
+            }
+            
+            function resetAnimation() {
+                currentStep = 0;
+                updateStepUI();
+                
+                // Reset all visual elements
+                userToServer.style.animation = 'none';
+                userToServer.style.strokeDasharray = '1000';
+                userToServer.style.strokeDashoffset = '1000';
+                
+                hackerIntercept1.style.display = 'none';
+                hackerIntercept2.style.display = 'none';
+                hackerIntercept1.style.animation = 'none';
+                hackerIntercept2.style.animation = 'none';
+                hackerIntercept1.style.strokeDashoffset = '1000';
+                hackerIntercept2.style.strokeDashoffset = '1000';
+                
+                hacker.style.opacity = '0';
+                
+                sessionToken.style.opacity = '0';
+                sessionToken.classList.remove('pulse');
+                sessionToken.style.left = '50%';
+                sessionToken.style.top = '50%';
+                sessionToken.style.transform = 'translate(-50%, -50%)';
+                sessionToken.style.backgroundColor = '#FEF3C7';
+                sessionToken.style.color = '#92400E';
+                
+                successBadge.style.opacity = '0';
+                server.classList.remove('highlight');
+                
+                // Reset hacker icon
+                const hackerIcon = hacker.querySelector('svg');
+                hackerIcon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                `;
+                
+                // Force reflow to ensure animations reset properly
+                void userToServer.offsetWidth;
+                
+                // Re-show first step
+                animateStep(0);
+            }
+        });
+    </script>
+</body>
+</html>
