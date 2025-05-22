@@ -1,5 +1,7 @@
 # Session Hijacking – Hiểu và nhận biết tấn công chiếm quyền phiên làm việc
 
+## Tutorial: https://youtu.be/NY60Ddwn1RA
+## Document: https://harrypage.hashnode.dev/
 ## Session là gì?
 
 Khi bạn đăng nhập vào một website (ví dụ: Facebook, Gmail), hệ thống sẽ tạo ra một **phiên làm việc** (gọi là *session*) để ghi nhớ bạn là ai. Thay vì bắt bạn nhập mật khẩu ở mỗi trang, website sẽ gán cho trình duyệt của bạn một **Session ID** – giống như một chiếc thẻ ra vào.
